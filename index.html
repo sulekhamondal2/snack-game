@@ -1,0 +1,369 @@
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake Game</title>
+
+<style>
+body {
+  margin: 0;
+  text-align: center;
+  font-family: Arial;
+  color: white;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+canvas {
+  background: #111;
+  margin-top: 10px;
+  border-radius: 15px;
+}
+
+/* Buttons */
+button {
+  margin: 8px;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+}
+
+/* D-Pad */
+#controls button {
+  width: 60px;
+  height: 60px;
+  font-size: 22px;
+}
+
+/* Explosion */
+@keyframes explode {
+  0% { transform: scale(1); }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+.explode {
+  animation: explode 0.5s ease-out;
+}
+
+/* Shake */
+@keyframes shake {
+  0% { transform: translate(0); }
+  25% { transform: translate(5px, -5px); }
+  50% { transform: translate(-5px, 5px); }
+  75% { transform: translate(5px, 5px); }
+  100% { transform: translate(0); }
+}
+
+.shake {
+  animation: shake 0.4s;
+}
+
+#gameOverText {
+  position: fixed; /* better than absolute */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  
+  font-size: 40px;
+  font-weight: bold;
+  color: red;
+
+  display: none;
+  z-index: 1000;
+
+  text-shadow: 0 0 10px red, 0 0 20px red;
+}
+@keyframes gameOverAnim {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+    text-shadow: none;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+    text-shadow: 0 0 20px red;
+  }
+  100% {
+    transform: scale(1);
+    text-shadow: 0 0 10px red;
+  }
+}
+
+.game-over-anim {
+  animation: gameOverAnim 0.6s ease-out;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Score: <span id="score">0</span></h2>
+<h3>Level: <span id="level">1</span></h3>
+<h3>High Score: <span id="highScore">0</span></h3>
+
+<button onclick="startGame()">▶ Start</button>
+<button onclick="restartGame()">🔄 Restart</button>
+
+<div id="gameOverText">💀 GAME OVER 💀</div>
+
+<canvas id="game" width="400" height="400"></canvas>
+
+<!-- D-Pad -->
+<div id="controls">
+  <button onclick="setDir('UP')">⬆️</button><br>
+  <button onclick="setDir('LEFT')">⬅️</button>
+  <button onclick="setDir('DOWN')">⬇️</button>
+  <button onclick="setDir('RIGHT')">➡️</button>
+</div>
+
+<!-- Sounds -->
+<audio id="gameOverSound" src="https://www.myinstants.com/media/sounds/vine-boom.mp3"></audio>
+
+<audio id="bgMusic" loop>
+  <source src="https://www.bensound.com/bensound-music/bensound-funky.mp3">
+</audio>
+
+<script> 
+let isRunning = false;
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let box = 20;
+let snake, food, direction, score, level;
+let game = null;
+let speed = 150;
+
+let highScore = localStorage.getItem("highScore") || 0;
+
+/* 🔊 AUDIO FIX */
+let audioCtx;
+
+function initAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playEatSound(){
+  if(!audioCtx) return;
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "triangle"; // softer cartoon sound
+  osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.15);
+}
+function init(){
+  box = 20;
+
+  // ✅ Start inside grid properly
+  snake = [{x: 10 * box, y: 10 * box}];
+
+  direction = "RIGHT";
+
+  food = randomFood();
+
+  score = 0;
+  level = 1;
+  speed = 180;
+
+  document.getElementById("gameOverText").style.display = "none";
+  canvas.classList.remove("explode","shake");
+document.getElementById("gameOverText").style.display = "none";
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById("score").innerText = score;
+  document.getElementById("level").innerText = level;
+  document.getElementById("highScore").innerText = highScore;
+
+  if(score > highScore){
+    highScore = score;
+    localStorage.setItem("highScore", highScore);
+  }
+}
+
+function randomFood(){
+  return {
+    x: Math.floor(Math.random()*20)*box,
+    y: Math.floor(Math.random()*20)*box
+  };
+}
+
+/* Controls */
+function setDir(dir){
+  if(dir==="UP" && direction!=="DOWN") direction="UP";
+  if(dir==="DOWN" && direction!=="UP") direction="DOWN";
+  if(dir==="LEFT" && direction!=="RIGHT") direction="LEFT";
+  if(dir==="RIGHT" && direction!=="LEFT") direction="RIGHT";
+}
+
+document.addEventListener("keydown", e=>{
+  setDir(e.key.replace("Arrow","").toUpperCase());
+});
+
+function draw(){
+    if(!isRunning) return;
+  ctx.fillStyle="rgba(0,0,0,0.3)";
+  ctx.fillRect(0,0,400,400);
+
+  snake.forEach((s,i)=>{
+    let hue=(Date.now()/10 + i*25)%360;
+    ctx.fillStyle=`hsl(${hue},100%,50%)`;
+    ctx.fillRect(s.x,s.y,box,box);
+  });
+
+  ctx.fillStyle="red";
+  ctx.beginPath();
+  ctx.arc(food.x+10, food.y+10, 10, 0, Math.PI*2);
+  ctx.fill();
+
+  let headX = snake[0].x;
+let headY = snake[0].y;
+
+// ✅ move AFTER getting position
+if(direction==="UP") headY -= box;
+if(direction==="DOWN") headY += box;
+if(direction==="LEFT") headX -= box;
+if(direction==="RIGHT") headX += box;
+
+  
+
+  if(headX===food.x && headY===food.y){
+    score++;
+
+    // 🔊 Eat Sound (FIXED)
+    playEatSound();
+
+    if(score % 5 === 0){
+      level++;
+      speed -= 10;
+      clearInterval(game);
+      game = setInterval(draw, speed);
+    }
+
+    food = randomFood();
+  } else {
+    snake.pop();
+  }
+
+  let newHead = {x: headX, y: headY};
+
+  if(
+    headX<0 || headY<0 ||
+    headX>=400 || headY>=400 ||
+    collision(newHead, snake)
+  ){
+    clearInterval(game);
+    game = null;
+
+    canvas.classList.add("explode","shake");
+
+    let sound = document.getElementById("gameOverSound");
+    sound.currentTime = 0;
+    sound.play();
+
+    document.getElementById("gameOverText").style.display = "block";
+
+    setTimeout(()=>{
+      alert("Game Over! Score: " + score);
+    }, 500);
+
+    return;
+  }
+
+  snake.unshift(newHead);
+  updateUI();
+}
+
+function collision(head, body){
+  return body.some(s=>s.x===head.x && s.y===head.y);
+}
+
+function startGame(){
+  if(game!==null) return;
+
+  initAudio();
+  init();
+
+  isRunning = true; // ✅ important
+
+  game = setInterval(draw, speed);
+}
+
+function restartGame(){
+  clearInterval(game);
+  game = null;
+
+  initAudio(); // 🔊 ensure sound works again
+
+  init();
+  game = setInterval(draw, speed);
+}
+
+/* Music */
+function toggleMusic(){
+  let music = document.getElementById("bgMusic");
+
+  if(music.paused){
+    music.play();
+  } else {
+    music.pause();
+  }
+}  
+let startX = 0;
+let startY = 0;
+
+canvas.addEventListener("touchstart", function(e){
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+});
+
+canvas.addEventListener("touchmove", function(e){
+  let dx = e.touches[0].clientX - startX;
+  let dy = e.touches[0].clientY - startY;
+
+  // horizontal swipe
+  if(Math.abs(dx) > Math.abs(dy)){
+    if(dx > 30 && direction !== "LEFT"){
+      direction = "RIGHT";
+    }
+    else if(dx < -30 && direction !== "RIGHT"){
+      direction = "LEFT";
+    }
+  }
+  // vertical swipe
+  else {
+    if(dy > 30 && direction !== "UP"){
+      direction = "DOWN";
+    }
+    else if(dy < -30 && direction !== "DOWN"){
+      direction = "UP";
+    }
+  }
+}); 
+canvas.addEventListener("touchmove", function(e){
+  e.preventDefault();
+}, { passive: false });
+</script>
+
+</body>
+</html>
