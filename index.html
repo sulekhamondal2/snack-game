@@ -1,7 +1,3 @@
-
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -95,7 +91,9 @@ button {
     text-shadow: 0 0 10px red;
   }
 }
-
+body.no-scroll {
+  overflow: hidden;
+}
 .game-over-anim {
   animation: gameOverAnim 0.6s ease-out;
 }
@@ -182,7 +180,7 @@ function init(){
 
   score = 0;
   level = 1;
-  speed = 180;
+  speed = 200;
 
   document.getElementById("gameOverText").style.display = "none";
   canvas.classList.remove("explode","shake");
@@ -309,15 +307,7 @@ function startGame(){
   game = setInterval(draw, speed);
 }
 
-function restartGame(){
-  clearInterval(game);
-  game = null;
 
-  initAudio(); // 🔊 ensure sound works again
-
-  init();
-  game = setInterval(draw, speed);
-}
 
 /* Music */
 function toggleMusic(){
@@ -335,6 +325,25 @@ let startY = 0;
 canvas.addEventListener("touchstart", function(e){
   startX = e.touches[0].clientX;
   startY = e.touches[0].clientY;
+}, { passive: true });
+
+canvas.addEventListener("touchend", function(e){
+  let dx = e.changedTouches[0].clientX - startX;
+  let dy = e.changedTouches[0].clientY - startY;
+
+  // smaller threshold = faster response
+  if(Math.abs(dx) > Math.abs(dy)){
+    if(dx > 20 && direction !== "LEFT") direction = "RIGHT";
+    else if(dx < -20 && direction !== "RIGHT") direction = "LEFT";
+  } else {
+    if(dy > 20 && direction !== "UP") direction = "DOWN";
+    else if(dy < -20 && direction !== "DOWN") direction = "UP";
+  }
+}, { passive: true });
+
+canvas.addEventListener("touchstart", function(e){
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
 });
 
 canvas.addEventListener("touchmove", function(e){
@@ -343,7 +352,7 @@ canvas.addEventListener("touchmove", function(e){
 
   // horizontal swipe
   if(Math.abs(dx) > Math.abs(dy)){
-    if(dx > 30 && direction !== "LEFT"){
+    if(dx > 20 && direction !== "LEFT"){
       direction = "RIGHT";
     }
     else if(dx < -30 && direction !== "RIGHT"){
@@ -352,7 +361,7 @@ canvas.addEventListener("touchmove", function(e){
   }
   // vertical swipe
   else {
-    if(dy > 30 && direction !== "UP"){
+    if(dy > 20 && direction !== "UP"){
       direction = "DOWN";
     }
     else if(dy < -30 && direction !== "DOWN"){
@@ -363,7 +372,24 @@ canvas.addEventListener("touchmove", function(e){
 canvas.addEventListener("touchmove", function(e){
   e.preventDefault();
 }, { passive: false });
+function restartGame(){
+  // stop current game
+  clearInterval(game);
+  game = null;
+
+  // reset everything
+  isRunning = false;
+
+  // reset UI + game state
+  init();
+
+  // restart game
+  startGame();
+}
 </script>
 
 </body>
 </html>
+
+
+
